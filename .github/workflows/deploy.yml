@@ -1,0 +1,87 @@
+name: Build & Deploy
+
+on:
+  push:
+    branches: [main]
+    paths-ignore: ["terraform/**", "*.md"]
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  AWS_REGION: us-east-1
+  PROJECT_NAME: nursing-platform
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_GITHUB_ACTIONS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - uses: aws-actions/amazon-ecr-login@v2
+        id: ecr
+
+      - name: Build and push image
+        env:
+          REGISTRY: ${{ steps.ecr.outputs.registry }}
+          REPOSITORY: ${{ env.PROJECT_NAME }}-app
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          docker build -t "$REGISTRY/$REPOSITORY:$IMAGE_TAG" -t "$REGISTRY/$REPOSITORY:latest" .
+          docker push "$REGISTRY/$REPOSITORY:$IMAGE_TAG"
+          docker push "$REGISTRY/$REPOSITORY:latest"
+
+      - name: Run database migrations
+        env:
+          CLUSTER: ${{ env.PROJECT_NAME }}-cluster
+          FAMILY: ${{ env.PROJECT_NAME }}-app
+        run: |
+          NETWORK_CONFIG=$(aws ecs describe-services --cluster "$CLUSTER" --services "${PROJECT_NAME}-service" \
+            --query "services[0].networkConfiguration" --output json)
+          SUBNETS=$(echo "$NETWORK_CONFIG" | jq -r '.awsvpcConfiguration.subnets | join(",")')
+          SG=$(echo "$NETWORK_CONFIG" | jq -r '.awsvpcConfiguration.securityGroups | join(",")')
+
+          TASK_ARN=$(aws ecs run-task \
+            --cluster "$CLUSTER" \
+            --task-definition "$FAMILY" \
+            --launch-type FARGATE \
+            --network-configuration "awsvpcConfiguration={subnets=[$SUBNETS],securityGroups=[$SG],assignPublicIp=DISABLED}" \
+            --overrides "{\"containerOverrides\":[{\"name\":\"${PROJECT_NAME}-app\",\"command\":[\"npx\",\"prisma\",\"migrate\",\"deploy\"]}]}" \
+            --query "tasks[0].taskArn" --output text)
+
+          aws ecs wait tasks-stopped --cluster "$CLUSTER" --tasks "$TASK_ARN"
+
+          EXIT_CODE=$(aws ecs describe-tasks --cluster "$CLUSTER" --tasks "$TASK_ARN" \
+            --query "tasks[0].containers[0].exitCode" --output text)
+          if [ "$EXIT_CODE" != "0" ]; then
+            echo "Migration task failed with exit code $EXIT_CODE"
+            exit 1
+          fi
+
+      - name: Deploy new image to ECS
+        env:
+          REGISTRY: ${{ steps.ecr.outputs.registry }}
+          REPOSITORY: ${{ env.PROJECT_NAME }}-app
+          IMAGE_TAG: ${{ github.sha }}
+          CLUSTER: ${{ env.PROJECT_NAME }}-cluster
+          SERVICE: ${{ env.PROJECT_NAME }}-service
+          FAMILY: ${{ env.PROJECT_NAME }}-app
+        run: |
+          NEW_IMAGE="$REGISTRY/$REPOSITORY:$IMAGE_TAG"
+
+          CURRENT_TASK_DEF=$(aws ecs describe-task-definition --task-definition "$FAMILY" --query "taskDefinition")
+          NEW_TASK_DEF=$(echo "$CURRENT_TASK_DEF" | jq --arg IMAGE "$NEW_IMAGE" \
+            '.containerDefinitions[0].image = $IMAGE |
+             del(.taskDefinitionArn, .revision, .status, .requiresAttributes, .compatibilities, .registeredAt, .registeredBy)')
+
+          NEW_ARN=$(echo "$NEW_TASK_DEF" | aws ecs register-task-definition --cli-input-json file:///dev/stdin \
+            --query "taskDefinition.taskDefinitionArn" --output text)
+
+          aws ecs update-service --cluster "$CLUSTER" --service "$SERVICE" --task-definition "$NEW_ARN"
+          aws ecs wait services-stable --cluster "$CLUSTER" --services "$SERVICE"

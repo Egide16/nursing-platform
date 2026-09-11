@@ -1,0 +1,6 @@
+project_name      = "nursing-platform"
+aws_region        = "us-east-1"
+domain_name       = "training.chayil.it.com"
+route53_zone_name = "chayil.it.com"
+
+github_repos = ["Egide16/nursing-platform"]

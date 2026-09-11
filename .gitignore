@@ -1,0 +1,16 @@
+node_modules
+.next
+.env
+*.log
+
+# Terraform
+terraform/.terraform/*
+terraform/*.tfstate
+terraform/*.tfstate.*
+terraform/crash.log
+terraform/*.tfvars
+!terraform/terraform.tfvars.example
+terraform/override.tf
+terraform/override.tf.json
+# terraform/.terraform.lock.hcl is intentionally NOT ignored — commit it
+# so everyone (and CI) resolves the same provider versions.

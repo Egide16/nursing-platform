@@ -1,0 +1,178 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  SUPER_ADMIN
+  INSPECTOR
+  COMPANY_ADMIN
+  STUDENT
+}
+
+enum ProgressStatus {
+  LOCKED
+  UNLOCKED
+  COMPLETED
+}
+
+enum InspectionStatus {
+  DRAFT
+  SUBMITTED
+}
+
+enum ItemResult {
+  PASS
+  FAIL
+  NA
+}
+
+model Company {
+  id         String      @id @default(cuid())
+  name       String
+  createdAt  DateTime    @default(now())
+  groupHomes GroupHome[]
+  users      User[]
+}
+
+model GroupHome {
+  id          String       @id @default(cuid())
+  company     Company      @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  companyId   String
+  name        String
+  address     String?
+  createdAt   DateTime     @default(now())
+  clients     Client[]
+  inspections Inspection[]
+}
+
+// A "Client" here is a resident of a group home — the person inspections are
+// ultimately concerned with. Not to be confused with the company itself.
+model Client {
+  id          String    @id @default(cuid())
+  groupHome   GroupHome @relation(fields: [groupHomeId], references: [id], onDelete: Cascade)
+  groupHomeId String
+  name        String
+  dateOfBirth DateTime?
+  notes       String?
+  createdAt   DateTime  @default(now())
+}
+
+model User {
+  id           String           @id @default(cuid())
+  name         String
+  email        String           @unique
+  passwordHash String
+  role         Role
+  company      Company?         @relation(fields: [companyId], references: [id])
+  companyId    String?
+  createdAt    DateTime         @default(now())
+  progress     CourseProgress[]
+  inspections  Inspection[]     @relation("InspectorInspections")
+}
+
+model Course {
+  id             String           @id @default(cuid())
+  slug           String           @unique
+  title          String
+  summary        String
+  order          Int              @unique
+  validityMonths Int
+  modules        Module[]
+  questions      Question[]
+  progress       CourseProgress[]
+}
+
+model Module {
+  id       String @id @default(cuid())
+  course   Course @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  courseId String
+  title    String
+  body     String
+  order    Int
+}
+
+model Question {
+  id       String   @id @default(cuid())
+  course   Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  courseId String
+  prompt   String
+  order    Int
+  options  Option[]
+}
+
+model Option {
+  id         String   @id @default(cuid())
+  question   Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  questionId String
+  text       String
+  isCorrect  Boolean  @default(false)
+  order      Int
+}
+
+// One row per (student, course). This is where enrollment status, the
+// unlock state, and the issued certificate all live together.
+model CourseProgress {
+  id          String         @id @default(cuid())
+  user        User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId      String
+  course      Course         @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  courseId    String
+  status      ProgressStatus @default(LOCKED)
+  completedAt DateTime?
+  expiresAt   DateTime?
+  certId      String?
+  updatedAt   DateTime       @updatedAt
+
+  @@unique([userId, courseId])
+}
+
+// Reusable inspection checklist definition. Copied item-by-item onto each
+// Inspection at creation time, so editing a template later never changes
+// the historical record of a past visit.
+model ChecklistTemplate {
+  id          String                  @id @default(cuid())
+  name        String
+  items       ChecklistTemplateItem[]
+  inspections Inspection[]
+  createdAt   DateTime                @default(now())
+}
+
+model ChecklistTemplateItem {
+  id         String            @id @default(cuid())
+  template   ChecklistTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  templateId String
+  category   String
+  label      String
+  order      Int
+}
+
+model Inspection {
+  id          String            @id @default(cuid())
+  groupHome   GroupHome         @relation(fields: [groupHomeId], references: [id], onDelete: Cascade)
+  groupHomeId String
+  template    ChecklistTemplate @relation(fields: [templateId], references: [id])
+  templateId  String
+  inspector   User              @relation("InspectorInspections", fields: [inspectorId], references: [id])
+  inspectorId String
+  visitDate   DateTime          @default(now())
+  status      InspectionStatus  @default(DRAFT)
+  score       Int?
+  items       InspectionItem[]
+  createdAt   DateTime          @default(now())
+}
+
+model InspectionItem {
+  id           String      @id @default(cuid())
+  inspection   Inspection  @relation(fields: [inspectionId], references: [id], onDelete: Cascade)
+  inspectionId String
+  category     String
+  label        String
+  order        Int
+  result       ItemResult?
+  notes        String?
+}
