@@ -37,7 +37,7 @@ jobs:
           docker push "$REGISTRY/$REPOSITORY:$IMAGE_TAG"
           docker push "$REGISTRY/$REPOSITORY:latest"
 
-      - name: Run database migrations
+      - name: Sync database schema
         env:
           CLUSTER: ${{ env.PROJECT_NAME }}-cluster
           FAMILY: ${{ env.PROJECT_NAME }}-app
@@ -76,11 +76,14 @@ jobs:
           NEW_IMAGE="$REGISTRY/$REPOSITORY:$IMAGE_TAG"
 
           CURRENT_TASK_DEF=$(aws ecs describe-task-definition --task-definition "$FAMILY" --query "taskDefinition")
-          NEW_TASK_DEF=$(echo "$CURRENT_TASK_DEF" | jq --arg IMAGE "$NEW_IMAGE" \
+          echo "$CURRENT_TASK_DEF" | jq --arg IMAGE "$NEW_IMAGE" \
             '.containerDefinitions[0].image = $IMAGE |
-             del(.taskDefinitionArn, .revision, .status, .requiresAttributes, .compatibilities, .registeredAt, .registeredBy)')
+             del(.taskDefinitionArn, .revision, .status, .requiresAttributes, .compatibilities, .registeredAt, .registeredBy)' \
+            > new-task-def.json
 
-          NEW_ARN=$(echo "$NEW_TASK_DEF" | aws ecs register-task-definition --cli-input-json file:///dev/stdin \
+          jq empty new-task-def.json
+
+          NEW_ARN=$(aws ecs register-task-definition --cli-input-json file://new-task-def.json \
             --query "taskDefinition.taskDefinitionArn" --output text)
 
           aws ecs update-service --cluster "$CLUSTER" --service "$SERVICE" --task-definition "$NEW_ARN"
