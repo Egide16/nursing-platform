@@ -52,7 +52,7 @@ jobs:
             --task-definition "$FAMILY" \
             --launch-type FARGATE \
             --network-configuration "awsvpcConfiguration={subnets=[$SUBNETS],securityGroups=[$SG],assignPublicIp=DISABLED}" \
-            --overrides "{\"containerOverrides\":[{\"name\":\"${PROJECT_NAME}-app\",\"command\":[\"npx\",\"prisma\",\"migrate\",\"deploy\"]}]}" \
+            --overrides "{\"containerOverrides\":[{\"name\":\"${PROJECT_NAME}-app\",\"command\":[\"npx\",\"prisma\",\"db\",\"push\",\"--accept-data-loss\"]}]}" \
             --query "tasks[0].taskArn" --output text)
 
           aws ecs wait tasks-stopped --cluster "$CLUSTER" --tasks "$TASK_ARN"
