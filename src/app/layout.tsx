@@ -2,7 +2,7 @@ import "./globals.css";
 import Providers from "@/components/Providers";
 
 export const metadata = {
-  title: "Meridian Nursing Consultants",
+  title: "Knowledge Cornerstone",
   description: "Training and inspections platform",
 };
 

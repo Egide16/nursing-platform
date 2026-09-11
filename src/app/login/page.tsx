@@ -28,7 +28,7 @@ export default function LoginPage() {
   return (
     <div className="min-h-screen flex items-center justify-center px-6">
       <div className="w-full max-w-sm">
-        <h1 className="serif text-center text-2xl text-ink mb-1">Meridian Nursing Consultants</h1>
+        <h1 className="serif text-center text-2xl text-ink mb-1">Knowledge Cornerstone</h1>
         <p className="text-center text-sm text-slate mb-8">Sign in to continue</p>
 
         <form onSubmit={handleSubmit} className="flex flex-col gap-3">

@@ -30,3 +30,20 @@ export async function createCompanyAdmin(companyId: string, formData: FormData) 
 
   revalidatePath(`/admin/companies/${companyId}`);
 }
+
+// Lets Knowledge Cornerstone staff onboard a company's group homes
+// themselves — useful before a company admin account even exists, or
+// when staff are doing the data entry on the company's behalf directly.
+export async function createGroupHomeAdmin(companyId: string, formData: FormData) {
+  await requireRole(["SUPER_ADMIN", "INSPECTOR"]);
+  const name = String(formData.get("name") || "").trim();
+  const address = String(formData.get("address") || "").trim();
+  if (!name) return;
+
+  const home = await prisma.groupHome.create({
+    data: { companyId, name, address: address || null },
+  });
+
+  revalidatePath(`/admin/companies/${companyId}`);
+  redirect(`/admin/group-homes/${home.id}`);
+}

@@ -36,12 +36,19 @@ export default async function CertificatePage({ params }: { params: { courseId: 
 
       <div className="bg-white border border-line px-10 py-12">
         <div className="border border-gold px-8 py-9">
-          <p className="text-center text-xs text-slate tracking-wide">MERIDIAN NURSING CONSULTANTS</p>
+          <p className="text-center text-xs text-slate tracking-wide">
+            {course.issuingAuthority.toUpperCase()}
+          </p>
           <p className="text-center text-xs text-slate mt-6 tracking-wide">CERTIFICATE OF COMPLETION</p>
           <p className="text-center text-sm text-slate mt-6">This certifies that</p>
           <h1 className="serif text-center text-3xl text-ink mt-2">{session.user.name}</h1>
           <p className="text-center text-sm text-slate mt-4">has successfully completed</p>
           <h2 className="serif text-center text-xl text-tealdark mt-2">{course.title}</h2>
+          {course.issuingAuthority !== "Knowledge Cornerstone" && (
+            <p className="text-center text-xs text-slate mt-2">
+              training administered by Knowledge Cornerstone
+            </p>
+          )}
 
           <div className="flex items-center justify-center gap-10 mt-10">
             <div className="text-center">
@@ -55,6 +62,14 @@ export default async function CertificatePage({ params }: { params: { courseId: 
           </div>
 
           <p className="text-center text-xs text-slate mt-8">Certificate ID {progress.certId}</p>
+
+          {course.requiresExternalLicense && (
+            <p className="text-center text-xs text-slate mt-2">
+              {progress.licenseNumber
+                ? `${course.issuingAuthority} License #${progress.licenseNumber}`
+                : `${course.issuingAuthority} license number pending — this training certificate is not the license itself`}
+            </p>
+          )}
         </div>
       </div>
 

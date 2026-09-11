@@ -13,7 +13,7 @@ export default function NavBar({
   return (
     <div className="flex items-center justify-between max-w-4xl mx-auto px-6 py-5 border-b border-line">
       <div className="flex items-center gap-8">
-        <span className="text-sm text-ink font-medium">Meridian &middot; {label}</span>
+        <span className="text-sm text-ink font-medium">Knowledge Cornerstone &middot; {label}</span>
         <nav className="flex items-center gap-5">
           {links.map((l) => (
             <Link key={l.href} href={l.href} className="text-sm text-slate hover:text-teal">

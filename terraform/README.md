@@ -68,11 +68,13 @@ Elsewhere in the repo:
    docker push <ecr_repository_url>:latest
    aws ecs update-service --cluster nursing-platform-cluster --service nursing-platform-service --force-new-deployment
    ```
-6. Run the initial migration + seed once, the same way `deploy.yml`
-   does it for migrations (`aws ecs run-task ... --overrides
-   '{"containerOverrides":[{"name":"nursing-platform-app","command":["npx","prisma","migrate","deploy"]}]}'`),
+6. Run the initial schema sync + seed once, the same way `deploy.yml`
+   does it (`aws ecs run-task ... --overrides
+   '{"containerOverrides":[{"name":"nursing-platform-app","command":["npx","prisma","db","push","--accept-data-loss"]}]}'`),
    and again with `["npm","run","seed"]` if you want the seeded demo
-   accounts in this environment.
+   accounts in this environment. (Uses `db push`, not `migrate deploy` —
+   see the note in `.github/workflows/deploy.yml` on why, and when to
+   switch.)
 7. After DNS + ACM validation propagate (usually a few minutes),
    `terraform output app_url` is live.
 
@@ -87,8 +89,8 @@ The app and its infrastructure live in one repo, but on purpose have
   (Settings → Environments) if you want a manual approval gate before
   apply runs.
 - **`deploy.yml`** triggers on everything *except* `terraform/**` and
-  `*.md` — builds the Docker image, pushes it to ECR, runs
-  `prisma migrate deploy` as a one-off Fargate task, then rolls the ECS
+  `*.md` — builds the Docker image, pushes it to ECR, syncs the database
+  schema (`prisma db push`) as a one-off Fargate task, then rolls the ECS
   service to the new image.
 
 That split matters even in one repo: app code ships far more often than

@@ -38,6 +38,11 @@ jobs:
           docker push "$REGISTRY/$REPOSITORY:latest"
 
       - name: Sync database schema
+        # Using `prisma db push` rather than `migrate deploy`: this project
+        # has no prisma/migrations/ history yet (db push syncs schema.prisma
+        # straight to the database, no migration files required). Switch to
+        # `migrate deploy` once real migration files exist — see
+        # terraform/README.md for that transition.
         env:
           CLUSTER: ${{ env.PROJECT_NAME }}-cluster
           FAMILY: ${{ env.PROJECT_NAME }}-app
@@ -81,8 +86,16 @@ jobs:
              del(.taskDefinitionArn, .revision, .status, .requiresAttributes, .compatibilities, .registeredAt, .registeredBy)' \
             > new-task-def.json
 
+          # Validate before attempting to register — if this fails, the
+          # error points at the exact malformed spot instead of AWS's
+          # generic "Invalid JSON received".
           jq empty new-task-def.json
 
+          # A real temp file, not `file:///dev/stdin` — piping JSON into
+          # that special path has a known history of failing silently or
+          # with a generic parse error on some AWS CLI versions, since a
+          # pipe doesn't behave identically to a real file for the
+          # operations the CLI performs on it (e.g. determining size).
           NEW_ARN=$(aws ecs register-task-definition --cli-input-json file://new-task-def.json \
             --query "taskDefinition.taskDefinitionArn" --output text)
 

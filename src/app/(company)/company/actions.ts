@@ -60,3 +60,31 @@ export async function createStudent(formData: FormData) {
   revalidatePath("/company");
   redirect("/company");
 }
+
+// A student's real external license (e.g. their State of Maine CRMA
+// number) is obtained separately from this platform — this just records
+// it once the company admin has it, for courses where that applies.
+export async function updateLicenseNumber(courseProgressId: string, formData: FormData) {
+  const session = await requireRole(["COMPANY_ADMIN"]);
+  const licenseNumber = String(formData.get("licenseNumber") || "").trim();
+
+  const progress = await prisma.courseProgress.findUnique({
+    where: { id: courseProgressId },
+    include: { user: true, course: true },
+  });
+
+  // Confirm this progress record actually belongs to a student in the
+  // admin's own company before touching anything.
+  if (!progress || progress.user.companyId !== session.user.companyId) return;
+  if (!progress.course.requiresExternalLicense) return;
+
+  await prisma.courseProgress.update({
+    where: { id: courseProgressId },
+    data: {
+      licenseNumber: licenseNumber || null,
+      licenseIssuedAt: licenseNumber ? new Date() : null,
+    },
+  });
+
+  revalidatePath("/company");
+}

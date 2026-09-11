@@ -19,6 +19,8 @@ async function main() {
         "Medication administration fundamentals for staff working in group home / residential settings.",
       order: 1,
       validityMonths: 24,
+      issuingAuthority: "State of Maine",
+      requiresExternalLicense: true,
       modules: [
         {
           title: "Scope of Practice for Medication Aides",
@@ -64,6 +66,8 @@ async function main() {
       summary: "Safe insulin storage, dosing checks, and hypoglycemia response.",
       order: 2,
       validityMonths: 12,
+      issuingAuthority: "Knowledge Cornerstone",
+      requiresExternalLicense: false,
       modules: [
         {
           title: "Insulin Types & Storage",
@@ -109,6 +113,8 @@ async function main() {
       summary: "Core first aid skills for common emergencies in a residential care setting.",
       order: 3,
       validityMonths: 24,
+      issuingAuthority: "Knowledge Cornerstone",
+      requiresExternalLicense: false,
       modules: [
         {
           title: "Primary Assessment",
@@ -152,13 +158,26 @@ async function main() {
   for (const c of courseData) {
     await prisma.course.upsert({
       where: { slug: c.slug },
-      update: {},
+      // On a re-run against an already-seeded database, still refresh
+      // these scalar fields (e.g. so issuingAuthority actually reaches
+      // courses seeded before that field existed). Modules/questions are
+      // intentionally left alone here — re-creating those on every run
+      // would duplicate them, since they're nested creates, not upserts.
+      update: {
+        title: c.title,
+        summary: c.summary,
+        validityMonths: c.validityMonths,
+        issuingAuthority: c.issuingAuthority,
+        requiresExternalLicense: c.requiresExternalLicense,
+      },
       create: {
         slug: c.slug,
         title: c.title,
         summary: c.summary,
         order: c.order,
         validityMonths: c.validityMonths,
+        issuingAuthority: c.issuingAuthority,
+        requiresExternalLicense: c.requiresExternalLicense,
         modules: { create: c.modules.map((m, i) => ({ ...m, order: i })) },
         questions: {
           create: c.questions.map((q, i) => ({
@@ -195,33 +214,59 @@ async function main() {
   });
 
   // ---- Companies, group homes, clients -------------------------------
-  const companyA = await prisma.company.create({ data: { name: "Cedar Grove Residential Services" } });
-  const companyB = await prisma.company.create({ data: { name: "Harborview Group Homes" } });
+  // findFirst-then-create rather than a plain create, so re-running this
+  // script against an already-seeded database doesn't pile up duplicate
+  // companies every time.
+  const companyA =
+    (await prisma.company.findFirst({ where: { name: "Cedar Grove Residential Services" } })) ??
+    (await prisma.company.create({ data: { name: "Cedar Grove Residential Services" } }));
+  const companyB =
+    (await prisma.company.findFirst({ where: { name: "Harborview Group Homes" } })) ??
+    (await prisma.company.create({ data: { name: "Harborview Group Homes" } }));
 
-  const homeA1 = await prisma.groupHome.create({
-    data: { companyId: companyA.id, name: "Cedar Grove House 1", address: "12 Birch St, Lewiston, ME" },
-  });
-  const homeB1 = await prisma.groupHome.create({
-    data: { companyId: companyB.id, name: "Harborview East", address: "88 Dockside Ave, Portland, ME" },
-  });
+  // Group homes are conventionally named after their street address —
+  // reflected here rather than a made-up facility name.
+  const homeA1 =
+    (await prisma.groupHome.findFirst({ where: { companyId: companyA.id, name: "12 Birch St" } })) ??
+    (await prisma.groupHome.create({
+      data: { companyId: companyA.id, name: "12 Birch St", address: "12 Birch St, Lewiston, ME" },
+    }));
+  const homeB1 =
+    (await prisma.groupHome.findFirst({ where: { companyId: companyB.id, name: "88 Dockside Ave" } })) ??
+    (await prisma.groupHome.create({
+      data: { companyId: companyB.id, name: "88 Dockside Ave", address: "88 Dockside Ave, Portland, ME" },
+    }));
 
-  await prisma.client.createMany({
-    data: [
-      { groupHomeId: homeA1.id, name: "Resident A1" },
-      { groupHomeId: homeA1.id, name: "Resident A2" },
-      { groupHomeId: homeB1.id, name: "Resident B1" },
-    ],
-  });
+  if ((await prisma.client.count({ where: { groupHomeId: homeA1.id } })) === 0) {
+    await prisma.client.createMany({
+      data: [
+        { groupHomeId: homeA1.id, name: "Resident A1" },
+        { groupHomeId: homeA1.id, name: "Resident A2" },
+      ],
+    });
+  }
+  if ((await prisma.client.count({ where: { groupHomeId: homeB1.id } })) === 0) {
+    await prisma.client.createMany({ data: [{ groupHomeId: homeB1.id, name: "Resident B1" }] });
+  }
 
   // ---- Users ----------------------------------------------------------
-  const superAdmin = await prisma.user.create({
-    data: { name: "Meridian Admin", email: "admin@meridian-nc.example", passwordHash, role: Role.SUPER_ADMIN },
+  // upsert, not create: re-running this script against a database that
+  // already has these users (matched by email) updates them in place
+  // instead of crashing on a duplicate-email constraint violation.
+  const superAdmin = await prisma.user.upsert({
+    where: { email: "admin@knowledgecornerstone.example" },
+    update: {},
+    create: { name: "Knowledge Cornerstone Admin", email: "admin@knowledgecornerstone.example", passwordHash, role: Role.SUPER_ADMIN },
   });
-  const inspector = await prisma.user.create({
-    data: { name: "Jordan Inspector", email: "inspector@meridian-nc.example", passwordHash, role: Role.INSPECTOR },
+  const inspector = await prisma.user.upsert({
+    where: { email: "inspector@knowledgecornerstone.example" },
+    update: {},
+    create: { name: "Jordan Inspector", email: "inspector@knowledgecornerstone.example", passwordHash, role: Role.INSPECTOR },
   });
-  const companyAdminA = await prisma.user.create({
-    data: {
+  const companyAdminA = await prisma.user.upsert({
+    where: { email: "admin@cedargrove.example" },
+    update: {},
+    create: {
       name: "Casey (Cedar Grove Admin)",
       email: "admin@cedargrove.example",
       passwordHash,
@@ -229,8 +274,10 @@ async function main() {
       companyId: companyA.id,
     },
   });
-  const studentA1 = await prisma.user.create({
-    data: {
+  const studentA1 = await prisma.user.upsert({
+    where: { email: "alex@cedargrove.example" },
+    update: {},
+    create: {
       name: "Alex Student",
       email: "alex@cedargrove.example",
       passwordHash,
@@ -241,8 +288,10 @@ async function main() {
 
   // First course unlocked, rest locked — same pattern the student app enforces at runtime.
   for (const [i, course] of courses.entries()) {
-    await prisma.courseProgress.create({
-      data: {
+    await prisma.courseProgress.upsert({
+      where: { userId_courseId: { userId: studentA1.id, courseId: course.id } },
+      update: {},
+      create: {
         userId: studentA1.id,
         courseId: course.id,
         status: i === 0 ? "UNLOCKED" : "LOCKED",
@@ -253,8 +302,8 @@ async function main() {
   console.log("Seed complete.");
   console.log("Checklist template:", template.name);
   console.log("Demo login password for all seeded users:", DEMO_PASSWORD);
-  console.log("  super admin:   admin@meridian-nc.example");
-  console.log("  inspector:     inspector@meridian-nc.example");
+  console.log("  super admin:   admin@knowledgecornerstone.example");
+  console.log("  inspector:     inspector@knowledgecornerstone.example");
   console.log("  company admin: admin@cedargrove.example  (Cedar Grove Residential Services)");
   console.log("  student:       alex@cedargrove.example");
 }

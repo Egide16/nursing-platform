@@ -1,5 +1,11 @@
 generator client {
   provider      = "prisma-client-js"
+  // "native" covers whatever platform runs `prisma generate` locally
+  // (e.g. Windows, for local dev). "linux-musl-openssl-3.0.x" is the
+  // exact target needed for this Docker image — alpine (musl libc) with
+  // OpenSSL 3.x, matching what `apk add openssl` actually installs.
+  // Without this, Prisma auto-detects the target at generate time, and
+  // gets it wrong if OpenSSL isn't present in the builder stage either.
   binaryTargets = ["native", "linux-musl-openssl-3.0.x"]
 }
 
@@ -83,6 +89,14 @@ model Course {
   summary        String
   order          Int              @unique
   validityMonths Int
+  // Who actually issues the credential for this course — shown on the
+  // certificate. CRMA is issued by the state, not by us; other courses
+  // are issued directly by the company running this platform.
+  issuingAuthority        String  @default("Knowledge Cornerstone")
+  // True only for courses where the real credential is a state license/
+  // registration number obtained separately from our training — e.g.
+  // CRMA. When true, CourseProgress.licenseNumber becomes relevant.
+  requiresExternalLicense Boolean @default(false)
   modules        Module[]
   questions      Question[]
   progress       CourseProgress[]
@@ -127,6 +141,13 @@ model CourseProgress {
   completedAt DateTime?
   expiresAt   DateTime?
   certId      String?
+  // The real external license/registration number (e.g. a State of Maine
+  // CRMA number), entered once the student actually receives it — this
+  // is separate from certId, which is just our own training-completion
+  // record. Null until someone fills it in; only meaningful when
+  // course.requiresExternalLicense is true.
+  licenseNumber   String?
+  licenseIssuedAt DateTime?
   updatedAt   DateTime       @updatedAt
 
   @@unique([userId, courseId])

@@ -5,8 +5,11 @@ import { createInspection } from "../actions";
 export default async function NewInspection() {
   await requireRole(["SUPER_ADMIN", "INSPECTOR"]);
 
-  const [groupHomes, templates] = await Promise.all([
-    prisma.groupHome.findMany({ include: { company: true }, orderBy: { name: "asc" } }),
+  const [companies, templates] = await Promise.all([
+    prisma.company.findMany({
+      include: { groupHomes: { orderBy: { name: "asc" } } },
+      orderBy: { name: "asc" },
+    }),
     prisma.checklistTemplate.findMany({ orderBy: { name: "asc" } }),
   ]);
 
@@ -16,11 +19,17 @@ export default async function NewInspection() {
       <form action={createInspection} className="flex flex-col gap-3">
         <select name="groupHomeId" required className="px-4 py-3 border border-line text-sm bg-white">
           <option value="">Select a group home&hellip;</option>
-          {groupHomes.map((h) => (
-            <option key={h.id} value={h.id}>
-              {h.company.name} &middot; {h.name}
-            </option>
-          ))}
+          {companies.map((c) =>
+            c.groupHomes.length > 0 ? (
+              <optgroup key={c.id} label={c.name}>
+                {c.groupHomes.map((h) => (
+                  <option key={h.id} value={h.id}>
+                    {h.name}
+                  </option>
+                ))}
+              </optgroup>
+            ) : null
+          )}
         </select>
         <select name="templateId" required className="px-4 py-3 border border-line text-sm bg-white">
           <option value="">Select a checklist&hellip;</option>

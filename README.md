@@ -1,4 +1,4 @@
-# Meridian Nursing Consultants — Training & Inspections Platform (Sample)
+# Knowledge Cornerstone — Training & Inspections Platform (Sample)
 
 This is a working sample built to show the data model and core flows for
 review — not a finished, production-hardened app. It's meant to be read,
@@ -19,9 +19,9 @@ clicked through locally, and marked up with what to change.
 - **Student** — takes courses in order, downloads certificates.
 - **Company Admin** — belongs to one company (a group-home operator);
   manages that company's group homes, residents, and staff/students.
-- **Inspector** — Meridian staff who run inspections against any group
+- **Inspector** — Knowledge Cornerstone staff who run inspections against any group
   home.
-- **Super Admin** — Meridian staff with full access (can also inspect).
+- **Super Admin** — Knowledge Cornerstone staff with full access (can also inspect).
 
 ## Deploying to AWS
 
@@ -71,6 +71,13 @@ too — see `terraform/README.md` for the full setup walkthrough.
 
 ## Deliberately stubbed or simplified — flag what you want changed
 
+- **No `prisma/migrations/` history yet.** The schema is applied with
+  `prisma db push` (syncs the database straight to `schema.prisma`)
+  rather than versioned migration files — that's why step 3 above uses
+  `migrate dev`, which generates that folder the first time it's run
+  against a real database. Once it exists, commit it, and switch
+  `deploy.yml` and `terraform/README.md`'s bootstrap step over to
+  `prisma migrate deploy` for real migration history going forward.
 - **Course content is seed-only.** There's no admin UI yet for editing
   course text, adding modules, or writing quiz questions — that all
   lives in `prisma/seed.ts`. Worth building if course content changes
@@ -95,17 +102,26 @@ too — see `terraform/README.md` for the full setup walkthrough.
   `updatedAt`/`createdAt` timestamps give you.
 - Auth is email/password only; no password reset flow yet.
 
-## Questions worth answering before this goes further
+## Decisions made so far
 
-1. Do CRMA / Insulin / First Aid need state-specific certificate
-   numbers or regulatory language on the certificate itself?
-2. Should inspections support scheduling (a planned future visit,
-   reminders) or are they always logged after the fact?
-3. Do you want inspection results shared with the company admin
-   directly in the platform, or delivered separately (e.g., PDF
-   report, email)?
-4. Should a course ever need retaking before its official expiration
-   (e.g., after an incident), independent of the expiration date?
-5. Any need for company-specific course requirements (e.g., a company
-   that doesn't need First Aid), or is the same three-course path
-   correct for everyone?
+1. **CRMA is issued by the State of Maine**; Insulin Administration and
+   First Aid are issued directly by Knowledge Cornerstone. Reflected in
+   `Course.issuingAuthority` — shown on the certificate itself, and
+   swapped in automatically wherever the company name would otherwise
+   appear.
+2. **CRMA also tracks a real state license number**, separate from our
+   own training-completion certificate — `Course.requiresExternalLicense`
+   and `CourseProgress.licenseNumber`/`licenseIssuedAt`. A company admin
+   fills this in once the student actually receives it (company
+   overview page); it's null until then, and the certificate says so
+   plainly rather than implying a number that doesn't exist yet.
+3. **Inspections are always logged after the fact** — no scheduling or
+   future-dated visits. Matches how `Inspection.visitDate` already
+   works (defaults to creation time, not user-editable).
+4. **Inspection results are visible to the company admin directly in
+   the platform** — a read-only view (`/company/inspections/[id]`),
+   not a separate report or email.
+5. **No mid-cycle retakes and no per-company course requirements** —
+   every company follows the same three-course sequence, and a
+   completed course is only retaken at its natural expiration. Both
+   could be added later if that changes.

@@ -26,6 +26,9 @@ export async function GET(_req: Request, { params }: { params: { courseId: strin
     issuedAt: progress.completedAt,
     expiresAt: progress.expiresAt,
     certId: progress.certId,
+    issuingAuthority: course.issuingAuthority,
+    requiresExternalLicense: course.requiresExternalLicense,
+    licenseNumber: progress.licenseNumber,
   });
 
   return new NextResponse(Buffer.from(pdfBytes), {
